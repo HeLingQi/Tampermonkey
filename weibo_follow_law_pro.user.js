@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         微博关注列表定律 Pro
 // @namespace    https://weibo.com/
-// @version      0.5.0
-// @description  后台静默扫描关注列表并自动拉黑；在用户主页和微博评论区注入一键拉黑按钮；支持种子库导入导出。
+// @version      0.5.1
+// @description  后台静默扫描关注列表并自动拉黑；在用户主页、评论区和关注列表注入一键拉黑按钮；支持种子库导入导出。
 // @updateURL    https://raw.githubusercontent.com/HeLingQi/Tampermonkey/main/weibo_follow_law_pro.user.js
 // @downloadURL  https://raw.githubusercontent.com/HeLingQi/Tampermonkey/main/weibo_follow_law_pro.user.js
 // @match        https://weibo.com/*
@@ -37,7 +37,7 @@
     HISTORY: 'wflp_history', VER: 'wflp_seed_version', INIT: 'wflp_initialized'
   };
 
-  const st = { run: 0, href: '', profile: null, observer: null };
+  const st = { run: 0, href: '', profile: null, observer: null, profileInjecting: false };
   const obj = (k, d = {}) => { const v = GM_getValue(k, d); return v && typeof v === 'object' && !Array.isArray(v) ? v : d; };
   const arr = k => { const v = GM_getValue(k, []); return Array.isArray(v) ? v.map(String) : []; };
   const cfg = () => ({ ...DEF, ...obj(K.S) });
@@ -73,7 +73,7 @@
 #wflp-toasts{position:fixed;top:76px;right:20px;z-index:2147483646;width:min(360px,calc(100vw - 32px));display:flex;flex-direction:column;gap:10px;pointer-events:none}
 .wflp-toast{pointer-events:auto;background:rgba(255,255,255,.97);border:1px solid rgba(0,0,0,.08);box-shadow:0 12px 34px rgba(0,0,0,.14);border-radius:12px;padding:12px 14px;font:13px/1.55 system-ui;color:#222;opacity:0;transform:translateY(-8px);transition:.18s}.wflp-toast.show{opacity:1;transform:none}.wflp-toast b{display:block;font-size:14px}.wflp-toast small{display:block;color:#666;margin-top:2px}.wflp-toast.success{border-left:4px solid #18a058}.wflp-toast.error{border-left:4px solid #d03050}.wflp-toast.warning{border-left:4px solid #f0a020}
 #wflp-modal{position:fixed;inset:0;z-index:2147483647;background:rgba(17,24,39,.32);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui}#wflp-modal .card{width:min(440px,100%);background:#fff;border-radius:16px;box-shadow:0 26px 80px rgba(0,0,0,.22);padding:22px;color:#222}#wflp-modal h3{margin:0 0 10px;font-size:18px}#wflp-modal p{white-space:pre-wrap;color:#5b616b;font-size:13px;line-height:1.7}#wflp-modal input{box-sizing:border-box;width:100%;padding:10px 12px;border:1px solid #d9dde4;border-radius:10px;font-size:14px;outline:none}#wflp-modal .err{min-height:20px;color:#d03050;font-size:12px;margin-top:5px}#wflp-modal .acts{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}#wflp-modal button{border-radius:9px;padding:8px 15px;cursor:pointer;font-weight:600;border:1px solid #ddd;background:#fff}#wflp-modal .ok{background:#ff8200;border-color:#ff8200;color:#fff}
-.wflp-block{display:inline-flex;align-items:center;justify-content:center;margin-left:6px;padding:2px 8px;min-height:20px;border:1px solid rgba(208,48,80,.28);border-radius:7px;background:rgba(208,48,80,.055);color:#c82f4f;font:500 12px/1.4 system-ui;cursor:pointer;vertical-align:middle}.wflp-block:hover{background:rgba(208,48,80,.12)}.wflp-block[disabled]{opacity:.5;cursor:default}.wflp-profile{min-height:30px;padding:4px 12px;font-size:13px}.wflp-float{position:fixed;top:86px;right:24px;z-index:2147483000;box-shadow:0 6px 18px rgba(0,0,0,.08)}
+.wflp-block{display:inline-flex;align-items:center;justify-content:center;margin-left:6px;padding:2px 8px;min-height:20px;border:1px solid rgba(208,48,80,.28);border-radius:7px;background:rgba(208,48,80,.055);color:#c82f4f;font:500 12px/1.4 system-ui;cursor:pointer;vertical-align:middle}.wflp-block:hover{background:rgba(208,48,80,.12)}.wflp-block[disabled]{opacity:.5;cursor:default}.wflp-profile{min-height:30px;padding:4px 12px;font-size:13px}.wflp-follow{min-height:28px;padding:4px 10px;font-size:12px}.wflp-float{position:fixed;top:86px;right:24px;z-index:2147483000;box-shadow:0 6px 18px rgba(0,0,0,.08)}
 @media(prefers-color-scheme:dark){.wflp-toast,#wflp-modal .card{background:#24262b;color:#eee}.wflp-toast small,#wflp-modal p{color:#b1b7c0}#wflp-modal input,#wflp-modal button{background:#1f2125;color:#eee;border-color:#454a52}}
 `; (document.head || document.documentElement).appendChild(e);
   }
@@ -183,11 +183,19 @@
   function makeBtn(uid, name, cls = '') { const b = document.createElement('button'); b.type = 'button'; b.className = `wflp-block ${cls}`; b.textContent = '拉黑'; b.dataset.uid = uid; b.onclick = e => { e.preventDefault(); e.stopPropagation(); manualBlock(uid, name, b); }; return b; }
 
   async function injectProfile() {
-    if (!profileHint() || document.querySelector('.wflp-profile')) return;
-    const p = st.profile || await resolveProfile().catch(() => null); if (!p?.uid || p.uid === myUid() || isSelf()) return; css();
-    const candidates = [...document.querySelectorAll('button')].filter(b => /^(关注|已关注|私信|更多)$/.test((b.textContent || '').trim()));
-    const anchor = candidates.find(b => b.offsetParent); const b = makeBtn(p.uid, p.name, 'wflp-profile');
-    if (anchor?.parentElement) anchor.parentElement.appendChild(b); else { b.classList.add('wflp-float'); document.documentElement.appendChild(b); }
+    if (!profileHint() || st.profileInjecting) return;
+    st.profileInjecting = true;
+    try {
+      const p = st.profile || await resolveProfile().catch(() => null); if (!p?.uid || p.uid === myUid() || isSelf()) return; css();
+      const existing = [...document.querySelectorAll('.wflp-profile')];
+      const same = existing.filter(b => b.dataset.uid === p.uid);
+      same.slice(1).forEach(b => b.remove());
+      existing.filter(b => b.dataset.uid !== p.uid).forEach(b => b.remove());
+      if (same[0]?.isConnected) return;
+      const candidates = [...document.querySelectorAll('button')].filter(b => /^(关注|已关注|私信|更多)$/.test((b.textContent || '').trim()));
+      const anchor = candidates.find(b => b.offsetParent); const b = makeBtn(p.uid, p.name, 'wflp-profile');
+      if (anchor?.parentElement) anchor.parentElement.appendChild(b); else { b.classList.add('wflp-float'); document.documentElement.appendChild(b); }
+    } finally { st.profileInjecting = false; }
   }
 
   function injectComments(root = document) {
@@ -201,10 +209,43 @@
     });
   }
 
+  function followPageOwnerUid() { return location.pathname.match(/^\/u\/page\/follow\/(\d{5,})(?:\/|$)/)?.[1] || ''; }
+  const isFollowPage = () => !!followPageOwnerUid();
+
+  function followUserNearControl(control) {
+    const owner = followPageOwnerUid(); let node = control.parentElement;
+    for (let depth = 0; node && depth < 8; depth++, node = node.parentElement) {
+      const users = new Map();
+      for (const a of node.querySelectorAll('a[href]')) {
+        const uid = uidFromHref(a.href), name = (a.textContent || '').trim().replace(/^@/, '');
+        if (!uid || uid === owner || uid === myUid()) continue;
+        if (!users.has(uid) || name) users.set(uid, { uid, name, link: a, host: node });
+      }
+      if (users.size === 1) return [...users.values()][0];
+    }
+    return null;
+  }
+
+  function injectFollowList(root = document) {
+    if (!isFollowPage()) return; css();
+    const controls = [];
+    if (root?.nodeType === 1 && root.matches?.('button,a')) controls.push(root);
+    if (root?.querySelectorAll) controls.push(...root.querySelectorAll('button,a'));
+    controls.forEach(control => {
+      const text = (control.textContent || '').trim();
+      if (!/^(关注|已关注|互相关注|取消关注)$/.test(text) || !control.offsetParent) return;
+      const u = followUserNearControl(control); if (!u?.uid) return;
+      const selector = '.wflp-follow[data-uid="' + u.uid + '"]';
+      if (document.querySelector(selector)) return;
+      const b = makeBtn(u.uid, u.name, 'wflp-follow');
+      if (control.parentElement) control.insertAdjacentElement('afterend', b);
+    });
+  }
+
   function observe() {
     if (st.observer || !document.documentElement) return;
-    st.observer = new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType !== 1) return; injectComments(n); if (profileHint()) injectProfile(); })));
-    st.observer.observe(document.documentElement, { childList: true, subtree: true }); injectComments(); injectProfile();
+    st.observer = new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType !== 1) return; injectComments(n); injectFollowList(n); if (profileHint()) injectProfile(); })));
+    st.observer.observe(document.documentElement, { childList: true, subtree: true }); injectComments(); injectFollowList(); injectProfile();
   }
 
   function historyAdd(x) { let h = GM_getValue(K.HISTORY, []); if (!Array.isArray(h)) h = []; h.unshift({ at: Date.now(), ...x }); h.length = Math.min(h.length, cfg().maxHistory); GM_setValue(K.HISTORY, h); }
@@ -226,9 +267,9 @@
   }
 
   function route() {
-    if (location.href === st.href) return; st.href = location.href; st.run++; st.profile = null; document.querySelector('.wflp-float')?.remove(); const run = st.run;
+    if (location.href === st.href) return; st.href = location.href; st.run++; st.profile = null; st.profileInjecting = false; document.querySelectorAll('.wflp-profile').forEach(b => b.remove()); const run = st.run;
     if (cfg().enabled && profileHint()) { setTimeout(injectProfile, 120); setTimeout(() => process(run).catch(console.error), 300); }
-    setTimeout(() => injectComments(), 150);
+    setTimeout(() => { injectComments(); injectFollowList(); }, 150);
   }
 
   function exportSeeds() {
@@ -262,6 +303,6 @@
 
   for (const m of ['pushState', 'replaceState']) { const raw = history[m]; history[m] = function(...a) { const r = raw.apply(this, a); queueMicrotask(route); return r; }; }
   addEventListener('popstate', route); addEventListener('hashchange', route);
-  const start = () => { observe(); route(); setInterval(() => { route(); injectComments(); }, 1200); };
+  const start = () => { observe(); route(); setInterval(() => { route(); injectComments(); injectFollowList(); }, 1200); };
   document.readyState === 'loading' ? addEventListener('DOMContentLoaded', start, { once: true }) : start();
 })();
