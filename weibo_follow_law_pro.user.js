@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         微博关注列表定律 Pro
 // @namespace    https://weibo.com/
-// @version      0.5.4
+// @version      0.5.5
 // @description  后台静默扫描关注列表并自动拉黑；支持关注/粉丝比例规则；在用户主页、评论区和关注列表注入一键拉黑按钮；支持种子库迁移与拉黑状态识别。
 // @updateURL    https://raw.githubusercontent.com/HeLingQi/Tampermonkey/main/weibo_follow_law_pro.user.js
 // @downloadURL  https://raw.githubusercontent.com/HeLingQi/Tampermonkey/main/weibo_follow_law_pro.user.js
@@ -22,6 +22,7 @@
     autoBlockScore: 1,
     defaultSeedWeight: 1,
     followFollowerRatioThreshold: 10,
+    protectFollowingUsers: true,
     pageSize: 20,
     maxFollowPages: 100,
     requestDelayMin: 650,
@@ -118,7 +119,7 @@
 #wflp-toasts{position:fixed;top:76px;right:20px;z-index:2147483646;width:min(360px,calc(100vw - 32px));display:flex;flex-direction:column;gap:10px;pointer-events:none}
 .wflp-toast{pointer-events:auto;background:rgba(255,255,255,.97);border:1px solid rgba(0,0,0,.08);box-shadow:0 12px 34px rgba(0,0,0,.14);border-radius:12px;padding:12px 14px;font:13px/1.55 system-ui;color:#222;opacity:0;transform:translateY(-8px);transition:.18s}.wflp-toast.show{opacity:1;transform:none}.wflp-toast b{display:block;font-size:14px}.wflp-toast small{display:block;color:#666;margin-top:2px}.wflp-toast.success{border-left:4px solid #18a058}.wflp-toast.error{border-left:4px solid #d03050}.wflp-toast.warning{border-left:4px solid #f0a020}
 #wflp-modal{position:fixed;inset:0;z-index:2147483647;background:rgba(17,24,39,.32);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui}#wflp-modal .card{width:min(440px,100%);background:#fff;border-radius:16px;box-shadow:0 26px 80px rgba(0,0,0,.22);padding:22px;color:#222}#wflp-modal h3{margin:0 0 10px;font-size:18px}#wflp-modal p{white-space:pre-wrap;color:#5b616b;font-size:13px;line-height:1.7}#wflp-modal input{box-sizing:border-box;width:100%;padding:10px 12px;border:1px solid #d9dde4;border-radius:10px;font-size:14px;outline:none}#wflp-modal .err{min-height:20px;color:#d03050;font-size:12px;margin-top:5px}#wflp-modal .acts{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}#wflp-modal button{border-radius:9px;padding:8px 15px;cursor:pointer;font-weight:600;border:1px solid #ddd;background:#fff}#wflp-modal .ok{background:#ff8200;border-color:#ff8200;color:#fff}
-.wflp-block{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;margin-left:8px;padding:0 12px;min-height:26px;border:1px solid #ff8200;border-radius:999px;background:#fff;color:#ff8200;font:500 12px/1 system-ui;cursor:pointer;vertical-align:middle;white-space:nowrap;transition:background .15s,border-color .15s,color .15s}.wflp-block:hover:not([disabled]){background:#fff5eb}.wflp-block:active:not([disabled]){background:#ffead6}.wflp-block[disabled]{cursor:default}.wflp-block.is-blocked{border-color:#d9d9d9;background:#f5f5f5;color:#939393;opacity:1}.wflp-profile{width:77px;min-width:77px;height:33.14px;padding:0;border-radius:999px;font-size:.875rem}.wflp-follow{min-width:64px;height:30px;padding:0 14px;font-size:13px}.wflp-float{position:fixed;top:86px;right:24px;z-index:2147483000;box-shadow:0 6px 18px rgba(0,0,0,.08)}
+.wflp-block{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;margin-left:8px;padding:0 12px;min-height:26px;border:1px solid #ff8200;border-radius:999px;background:#fff;color:#ff8200;font:500 12px/1 system-ui;cursor:pointer;vertical-align:middle;white-space:nowrap;transition:background .15s,border-color .15s,color .15s}.wflp-block:hover:not([disabled]){background:#fff5eb}.wflp-block:active:not([disabled]){background:#ffead6}.wflp-block[disabled]{cursor:default}.wflp-block.is-blocked{border-color:#d9d9d9;background:#f5f5f5;color:#939393;opacity:1}.wflp-profile{width:77px;min-width:77px;height:33.14px;padding:0;border-radius:999px;font-size:.875rem}.wflp-follow{min-width:64px;height:30px;padding:0 14px;font-size:13px}
 @media(prefers-color-scheme:dark){.wflp-toast,#wflp-modal .card{background:#24262b;color:#eee}.wflp-toast small,#wflp-modal p{color:#b1b7c0}#wflp-modal input,#wflp-modal button{background:#1f2125;color:#eee;border-color:#454a52}.wflp-block{background:transparent}.wflp-block:hover:not([disabled]){background:rgba(255,130,0,.12)}.wflp-block.is-blocked{background:#33363b;border-color:#555b63;color:#9aa0a8}}
 `;
     (document.head || document.documentElement).appendChild(e);
@@ -199,20 +200,48 @@
       const data = await api(`/ajax/profile/info?${query}`, {}, run);
       const user = data?.data?.user;
       if (user) {
+        const followingRaw = user.following;
+        const followingType = Number(user.following_type);
+        const followingStateReliable = followingRaw != null || user.following_type != null;
+        const isFollowing =
+          followingRaw === true ||
+          followingRaw === 1 ||
+          followingRaw === '1' ||
+          followingType === 1 ||
+          followingType === 2;
         return {
           uid: String(user.idstr || user.id || h.uid || ''),
           name: String(user.screen_name || h.name || ''),
           following: Number(user.friends_count ?? 0),
           followers: Number(user.followers_count ?? 0),
-          countsReliable: user.friends_count != null && user.followers_count != null
+          countsReliable: user.friends_count != null && user.followers_count != null,
+          isFollowing,
+          followingStateReliable
         };
       }
     } catch (e) {
       if (e.message === 'ROUTE_CHANGED') throw e;
     }
     return h.uid
-      ? { uid: h.uid, name: '', following: null, followers: null, countsReliable: false }
+      ? {
+          uid: h.uid,
+          name: '',
+          following: null,
+          followers: null,
+          countsReliable: false,
+          isFollowing: false,
+          followingStateReliable: false
+        }
       : null;
+  }
+
+  function isFollowingProfile(profile) {
+    if (profile?.followingStateReliable) return profile.isFollowing === true;
+    return [...document.querySelectorAll('button')]
+      .some(btn =>
+        btn.offsetParent &&
+        /^(已关注|互相关注)$/.test((btn.textContent || '').trim())
+      );
   }
 
   function myUid() {
@@ -472,12 +501,9 @@
       const candidates = [...document.querySelectorAll('button')]
         .filter(btn => /^(关注|已关注|私信|更多)$/.test((btn.textContent || '').trim()));
       const anchor = candidates.find(btn => btn.offsetParent);
+      if (!anchor?.parentElement) return;
       const btn = makeBtn(profile.uid, profile.name, 'wflp-profile');
-      if (anchor?.parentElement) anchor.parentElement.appendChild(btn);
-      else {
-        btn.classList.add('wflp-float');
-        document.documentElement.appendChild(btn);
-      }
+      anchor.parentElement.appendChild(btn);
     } finally {
       st.profileInjecting = false;
     }
@@ -654,6 +680,10 @@
       return;
     }
 
+    if (cfg().protectFollowingUsers && isFollowingProfile(profile)) {
+      return;
+    }
+
     const ratio = ratioRule(profile);
     if (ratio?.hit) {
       await blockByRatio(profile, ratio, run);
@@ -810,6 +840,23 @@
     toast('种子黑名单已导出', `共 ${exportSeeds()} 个种子`, 'success')
   );
   GM_registerMenuCommand('导入种子黑名单（迁移恢复）', importSeeds);
+  GM_registerMenuCommand(
+    cfg().protectFollowingUsers
+      ? '已关注用户不自动拉黑：开启'
+      : '已关注用户不自动拉黑：关闭',
+    () => {
+      const enabled = !cfg().protectFollowingUsers;
+      setCfg({ protectFollowingUsers: enabled });
+      GM_setValue(K.CACHE, {});
+      toast(
+        '已关注用户保护',
+        enabled
+          ? '已开启：你已关注的用户不会触发自动拉黑'
+          : '已关闭：你已关注的用户也会参与自动拉黑规则',
+        enabled ? 'success' : 'warning'
+      );
+    }
+  );
   GM_registerMenuCommand('设置 Risk Score 拉黑阈值', async () => {
     const value = await modal({
       title: '自动拉黑阈值',
@@ -873,7 +920,8 @@
       `已知拉黑：${Object.keys(blocked()).length}\n` +
       `白名单：${whitelist().size}\n` +
       `Risk Score 阈值：${cfg().autoBlockScore}\n` +
-      `关注/粉丝直拉阈值：>${cfg().followFollowerRatioThreshold} 倍`
+      `关注/粉丝直拉阈值：>${cfg().followFollowerRatioThreshold} 倍\n` +
+      `已关注用户保护：${cfg().protectFollowingUsers ? '开启' : '关闭'}`
   }));
   GM_registerMenuCommand(
     cfg().enabled ? '关闭关注列表定律 Pro' : '开启关注列表定律 Pro',
