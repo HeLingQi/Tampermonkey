@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         微博关注列表定律 Pro
 // @namespace    https://weibo.com/
-// @version      0.5.5
-// @description  后台静默扫描关注列表并自动拉黑；支持关注/粉丝比例规则；在用户主页、评论区和关注列表注入一键拉黑按钮；支持种子库迁移与拉黑状态识别。
+// @version      0.5.6
+// @description  后台静默扫描关注列表并自动拉黑；支持关注/粉丝比例规则、黑白名单互斥管理、种子库迁移与拉黑状态识别。
 // @updateURL    https://raw.githubusercontent.com/HeLingQi/Tampermonkey/main/weibo_follow_law_pro.user.js
 // @downloadURL  https://raw.githubusercontent.com/HeLingQi/Tampermonkey/main/weibo_follow_law_pro.user.js
 // @match        https://weibo.com/*
@@ -118,9 +118,9 @@
     e.textContent = `
 #wflp-toasts{position:fixed;top:76px;right:20px;z-index:2147483646;width:min(360px,calc(100vw - 32px));display:flex;flex-direction:column;gap:10px;pointer-events:none}
 .wflp-toast{pointer-events:auto;background:rgba(255,255,255,.97);border:1px solid rgba(0,0,0,.08);box-shadow:0 12px 34px rgba(0,0,0,.14);border-radius:12px;padding:12px 14px;font:13px/1.55 system-ui;color:#222;opacity:0;transform:translateY(-8px);transition:.18s}.wflp-toast.show{opacity:1;transform:none}.wflp-toast b{display:block;font-size:14px}.wflp-toast small{display:block;color:#666;margin-top:2px}.wflp-toast.success{border-left:4px solid #18a058}.wflp-toast.error{border-left:4px solid #d03050}.wflp-toast.warning{border-left:4px solid #f0a020}
-#wflp-modal{position:fixed;inset:0;z-index:2147483647;background:rgba(17,24,39,.32);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui}#wflp-modal .card{width:min(440px,100%);background:#fff;border-radius:16px;box-shadow:0 26px 80px rgba(0,0,0,.22);padding:22px;color:#222}#wflp-modal h3{margin:0 0 10px;font-size:18px}#wflp-modal p{white-space:pre-wrap;color:#5b616b;font-size:13px;line-height:1.7}#wflp-modal input{box-sizing:border-box;width:100%;padding:10px 12px;border:1px solid #d9dde4;border-radius:10px;font-size:14px;outline:none}#wflp-modal .err{min-height:20px;color:#d03050;font-size:12px;margin-top:5px}#wflp-modal .acts{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}#wflp-modal button{border-radius:9px;padding:8px 15px;cursor:pointer;font-weight:600;border:1px solid #ddd;background:#fff}#wflp-modal .ok{background:#ff8200;border-color:#ff8200;color:#fff}
-.wflp-block{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;margin-left:8px;padding:0 12px;min-height:26px;border:1px solid #ff8200;border-radius:999px;background:#fff;color:#ff8200;font:500 12px/1 system-ui;cursor:pointer;vertical-align:middle;white-space:nowrap;transition:background .15s,border-color .15s,color .15s}.wflp-block:hover:not([disabled]){background:#fff5eb}.wflp-block:active:not([disabled]){background:#ffead6}.wflp-block[disabled]{cursor:default}.wflp-block.is-blocked{border-color:#d9d9d9;background:#f5f5f5;color:#939393;opacity:1}.wflp-profile{width:77px;min-width:77px;height:33.14px;padding:0;border-radius:999px;font-size:.875rem}.wflp-follow{min-width:64px;height:30px;padding:0 14px;font-size:13px}
-@media(prefers-color-scheme:dark){.wflp-toast,#wflp-modal .card{background:#24262b;color:#eee}.wflp-toast small,#wflp-modal p{color:#b1b7c0}#wflp-modal input,#wflp-modal button{background:#1f2125;color:#eee;border-color:#454a52}.wflp-block{background:transparent}.wflp-block:hover:not([disabled]){background:rgba(255,130,0,.12)}.wflp-block.is-blocked{background:#33363b;border-color:#555b63;color:#9aa0a8}}
+#wflp-modal{position:fixed;inset:0;z-index:2147483647;background:rgba(17,24,39,.32);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui}#wflp-modal .card{width:min(440px,100%);background:#fff;border-radius:16px;box-shadow:0 26px 80px rgba(0,0,0,.22);padding:22px;color:#222}#wflp-modal h3{margin:0 0 10px;font-size:18px}#wflp-modal p{white-space:pre-wrap;color:#5b616b;font-size:13px;line-height:1.7}#wflp-modal input,#wflp-modal textarea{box-sizing:border-box;width:100%;padding:10px 12px;border:1px solid #d9dde4;border-radius:10px;font-size:14px;outline:none;font-family:inherit}#wflp-modal textarea{min-height:240px;resize:vertical;line-height:1.6}#wflp-modal .err{min-height:20px;color:#d03050;font-size:12px;margin-top:5px}#wflp-modal .acts{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}#wflp-modal button{border-radius:9px;padding:8px 15px;cursor:pointer;font-weight:600;border:1px solid #ddd;background:#fff}#wflp-modal .ok{background:#ff8200;border-color:#ff8200;color:#fff}
+.wflp-block{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;margin-left:8px;padding:0 12px;min-height:26px;border:1px solid #ff8200;border-radius:999px;background:#fff;color:#ff8200;font:500 12px/1 system-ui;cursor:pointer;vertical-align:middle;white-space:nowrap;transition:background .15s,border-color .15s,color .15s}.wflp-block:hover:not([disabled]){background:#fff5eb}.wflp-block:active:not([disabled]){background:#ffead6}.wflp-block[disabled]{cursor:default}.wflp-block.is-blocked{border-color:#d9d9d9;background:#f5f5f5;color:#939393;opacity:1}.wflp-block.is-whitelisted{border-color:#67c23a;background:#f0f9eb;color:#529b2e;opacity:1}.wflp-profile{width:77px;min-width:77px;height:33.14px;padding:0;border-radius:999px;font-size:.875rem}.wflp-follow{min-width:64px;height:30px;padding:0 14px;font-size:13px}
+@media(prefers-color-scheme:dark){.wflp-toast,#wflp-modal .card{background:#24262b;color:#eee}.wflp-toast small,#wflp-modal p{color:#b1b7c0}#wflp-modal input,#wflp-modal textarea,#wflp-modal button{background:#1f2125;color:#eee;border-color:#454a52}.wflp-block{background:transparent}.wflp-block:hover:not([disabled]){background:rgba(255,130,0,.12)}.wflp-block.is-blocked{background:#33363b;border-color:#555b63;color:#9aa0a8}.wflp-block.is-whitelisted{background:rgba(103,194,58,.12);border-color:#67c23a;color:#85ce61}}
 `;
     (document.head || document.documentElement).appendChild(e);
   }
@@ -147,17 +147,18 @@
     }, ms);
   }
 
-  function modal({ title, message = '', input = false, value = '', confirmText = '确定', validate = null }) {
+  function modal({ title, message = '', input = false, textarea = false, value = '', confirmText = '确定', validate = null }) {
     return new Promise(resolve => {
       css();
       document.getElementById('wflp-modal')?.remove();
       const bg = document.createElement('div');
       bg.id = 'wflp-modal';
-      bg.innerHTML = `<div class="card"><h3></h3><p></p>${input ? '<input>' : ''}<div class="err"></div><div class="acts"><button class="cancel">取消</button><button class="ok"></button></div></div>`;
+      const fieldHtml = textarea ? '<textarea></textarea>' : (input ? '<input>' : '');
+      bg.innerHTML = `<div class="card"><h3></h3><p></p>${fieldHtml}<div class="err"></div><div class="acts"><button class="cancel">取消</button><button class="ok"></button></div></div>`;
       bg.querySelector('h3').textContent = title;
       bg.querySelector('p').textContent = message;
       bg.querySelector('.ok').textContent = confirmText;
-      const field = bg.querySelector('input');
+      const field = bg.querySelector('input,textarea');
       if (field) field.value = value;
       const done = value => { bg.remove(); resolve(value); };
       bg.querySelector('.cancel').onclick = () => done(null);
@@ -170,7 +171,7 @@
       bg.onclick = event => { if (event.target === bg) done(null); };
       document.documentElement.appendChild(bg);
       field?.focus();
-      field?.select();
+      if (input) field?.select();
     });
   }
 
@@ -263,7 +264,11 @@
     return m?.[1] || String(item?.user?.idstr || item?.user?.id || item?.uid || '');
   }
 
-  function isKnownBlocked(uid) {
+  function isWhitelisted(uid) {
+    return whitelist().has(String(uid || ''));
+  }
+
+  function isActuallyBlocked(uid) {
     uid = String(uid || '');
     if (!uid) return false;
     if (blocked()[uid] || auto()[uid]) return true;
@@ -271,9 +276,20 @@
     return !!seed && ['official', 'manual'].includes(String(seed.source || ''));
   }
 
+  function isKnownBlocked(uid) {
+    uid = String(uid || '');
+    if (!uid || isWhitelisted(uid)) return false;
+    return isActuallyBlocked(uid);
+  }
+
   function markBlocked(uid, source = 'manual') {
     uid = String(uid || '');
     if (!uid) return;
+    const white = whitelist();
+    if (white.has(uid)) {
+      white.delete(uid);
+      GM_setValue(K.WL, [...white]);
+    }
     const map = blocked();
     map[uid] = { at: Date.now(), source };
     GM_setValue(K.BLOCKED, map);
@@ -282,10 +298,12 @@
 
   function setButtonState(btn, uid) {
     if (!btn) return;
-    const yes = isKnownBlocked(uid);
-    btn.disabled = yes;
-    btn.textContent = yes ? '已拉黑' : '拉黑';
-    btn.classList.toggle('is-blocked', yes);
+    const white = isWhitelisted(uid);
+    const black = !white && isKnownBlocked(uid);
+    btn.disabled = white || black;
+    btn.textContent = white ? '白名单' : (black ? '已拉黑' : '拉黑');
+    btn.classList.toggle('is-whitelisted', white);
+    btn.classList.toggle('is-blocked', black);
   }
 
   function refreshBlockButtons(uid = '') {
@@ -301,6 +319,7 @@
       const old = seeds();
       const autoMap = auto();
       const forcedSet = forced();
+      const whiteSet = whitelist();
       const official = new Set();
 
       for (let page = 1; page <= 500; page++) {
@@ -317,12 +336,15 @@
 
       const blockedIndex = {};
       const now = Date.now();
-      official.forEach(uid => blockedIndex[uid] = { at: now, source: 'official' });
+      official.forEach(uid => {
+        if (!whiteSet.has(uid)) blockedIndex[uid] = { at: now, source: 'official' };
+      });
       GM_setValue(K.BLOCKED, blockedIndex);
       GM_setValue(K.BLOCKED_SYNC_AT, now);
 
       const nextSeeds = {};
       for (const uid of official) {
+        if (whiteSet.has(uid)) continue;
         if (autoMap[uid] && !forcedSet.has(uid)) continue;
         nextSeeds[uid] = {
           weight: Number(old[uid]?.weight || cfg().defaultSeedWeight),
@@ -331,6 +353,7 @@
         };
       }
       for (const uid of forcedSet) {
+        if (whiteSet.has(uid)) continue;
         nextSeeds[uid] = {
           weight: Number(old[uid]?.weight || cfg().defaultSeedWeight),
           source: old[uid]?.source || 'forced',
@@ -420,7 +443,183 @@
     return data;
   }
 
+  async function doUnblock(uid) {
+    const token = cookie('XSRF-TOKEN');
+    if (!token) throw new Error('无法读取 XSRF-TOKEN');
+    const data = await api('/ajax/statuses/deleteFilters', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json;charset=UTF-8',
+        'x-xsrf-token': token,
+        'x-requested-with': 'XMLHttpRequest'
+      },
+      body: JSON.stringify({ uid: Number(uid) })
+    });
+    if (data?.ok !== 1 && data?.ok !== true) throw new Error(data?.msg || '微博未确认解除拉黑成功');
+    return data;
+  }
+
+  function removeSeed(uid) {
+    uid = String(uid || '');
+    const map = seeds();
+    if (map[uid]) {
+      delete map[uid];
+      GM_setValue(K.SEEDS, map);
+    }
+    const forcedSet = forced();
+    if (forcedSet.delete(uid)) GM_setValue(K.FORCED, [...forcedSet]);
+    bump();
+  }
+
+  function clearBlockedLocal(uid, { removeSeedToo = false } = {}) {
+    uid = String(uid || '');
+    const blockedMap = blocked();
+    if (blockedMap[uid]) {
+      delete blockedMap[uid];
+      GM_setValue(K.BLOCKED, blockedMap);
+    }
+    const autoMap = auto();
+    if (autoMap[uid]) {
+      delete autoMap[uid];
+      GM_setValue(K.AUTO, autoMap);
+    }
+    if (removeSeedToo) removeSeed(uid);
+    refreshBlockButtons(uid);
+  }
+
+  async function addWhitelist(uid, name = '') {
+    uid = String(uid || '');
+    if (!/^\d{5,}$/.test(uid)) throw new Error('UID 格式无效');
+    if (uid === myUid()) throw new Error('不能把当前登录账号加入白名单');
+
+    if (isActuallyBlocked(uid)) await doUnblock(uid);
+
+    const set = whitelist();
+    set.add(uid);
+    GM_setValue(K.WL, [...set]);
+
+    clearBlockedLocal(uid, { removeSeedToo: true });
+    refreshBlockButtons(uid);
+    return { uid, name };
+  }
+
+  function removeWhitelist(uid) {
+    uid = String(uid || '');
+    const set = whitelist();
+    const changed = set.delete(uid);
+    if (changed) GM_setValue(K.WL, [...set]);
+    refreshBlockButtons(uid);
+    return changed;
+  }
+
+  async function addBlacklist(uid, name = '') {
+    uid = String(uid || '');
+    if (!/^\d{5,}$/.test(uid)) throw new Error('UID 格式无效');
+    if (uid === myUid()) throw new Error('不能拉黑当前登录账号');
+
+    removeWhitelist(uid);
+    if (!isActuallyBlocked(uid)) await doBlock(uid);
+    addSeed(uid, name, cfg().defaultSeedWeight, 'manual');
+    markBlocked(uid, 'manual');
+    return uid;
+  }
+
+  async function removeBlacklist(uid, { removeSeedToo = true } = {}) {
+    uid = String(uid || '');
+    if (!/^\d{5,}$/.test(uid)) throw new Error('UID 格式无效');
+    if (isActuallyBlocked(uid)) await doUnblock(uid);
+    clearBlockedLocal(uid, { removeSeedToo });
+    return uid;
+  }
+
+  function parseUidList(text) {
+    const result = new Set();
+    String(text || '')
+      .split(/[\s,，;；]+/)
+      .map(x => x.trim())
+      .filter(Boolean)
+      .forEach(uid => {
+        if (/^\d{5,}$/.test(uid)) result.add(uid);
+      });
+    return result;
+  }
+
+  async function manageWhitelist() {
+    const current = whitelist();
+    const value = await modal({
+      title: '维护白名单',
+      message: '一行一个 UID。\n白名单优先级最高：保存时，如 UID 已被当前微博账号拉黑，会先解除微博黑名单；同时从自动拉黑记录和种子库移除。',
+      textarea: true,
+      value: [...current].sort().join('\n'),
+      confirmText: '保存白名单'
+    });
+    if (value === null) return;
+
+    const desired = parseUidList(value);
+    const errors = [];
+    for (const uid of desired) {
+      try { await addWhitelist(uid); }
+      catch (e) { errors.push(`${uid}: ${e.message || e}`); }
+      await sleep(180);
+    }
+
+    const next = whitelist();
+    for (const uid of [...next]) {
+      if (!desired.has(uid)) removeWhitelist(uid);
+    }
+
+    toast(
+      '白名单已保存',
+      `当前 ${whitelist().size} 人${errors.length ? ` · ${errors.length} 个处理失败` : ''}`,
+      errors.length ? 'warning' : 'success',
+      4500
+    );
+    if (errors.length) console.warn('[WFLP] whitelist errors', errors);
+  }
+
+  async function manageBlacklist() {
+    try { await syncBlacklist(); }
+    catch (e) { return toast('读取微博黑名单失败', String(e.message || e), 'error', 4500); }
+
+    const current = new Set(Object.keys(blocked()).filter(uid => !isWhitelisted(uid)));
+    const value = await modal({
+      title: '维护黑名单',
+      message: '一行一个 UID。\n保存后会与微博实际黑名单同步：新增 UID 执行拉黑，删除 UID 执行解除拉黑。加入黑名单会自动从白名单移除。',
+      textarea: true,
+      value: [...current].sort().join('\n'),
+      confirmText: '同步黑名单'
+    });
+    if (value === null) return;
+
+    const desired = parseUidList(value);
+    const errors = [];
+    for (const uid of desired) {
+      if (current.has(uid)) continue;
+      try { await addBlacklist(uid); }
+      catch (e) { errors.push(`拉黑 ${uid}: ${e.message || e}`); }
+      await sleep(300);
+    }
+    for (const uid of current) {
+      if (desired.has(uid)) continue;
+      try { await removeBlacklist(uid); }
+      catch (e) { errors.push(`解除 ${uid}: ${e.message || e}`); }
+      await sleep(300);
+    }
+
+    GM_setValue(K.BLOCKED_SYNC_AT, 0);
+    refreshBlockButtons();
+    toast(
+      '黑名单维护完成',
+      `目标 ${desired.size} 人${errors.length ? ` · ${errors.length} 个处理失败` : ''}`,
+      errors.length ? 'warning' : 'success',
+      4500
+    );
+    if (errors.length) console.warn('[WFLP] blacklist errors', errors);
+  }
+
   function addSeed(uid, name = '', weight = 1, source = 'forced') {
+    uid = String(uid || '');
+    if (isWhitelisted(uid)) return;
     const map = seeds();
     map[uid] = { weight: Number(weight) || 1, source, name };
     GM_setValue(K.SEEDS, map);
@@ -449,9 +648,7 @@
       btn.textContent = '处理中';
     }
     try {
-      await doBlock(uid);
-      addSeed(uid, name, cfg().defaultSeedWeight, 'manual');
-      markBlocked(uid, 'manual');
+      await addBlacklist(uid, name);
       toast(`已拉黑 ${name ? '@' + name : uid}`, '已加入持久种子库', 'success');
     } catch (e) {
       if (btn) {
@@ -903,13 +1100,43 @@
       toast('重点种子已添加', `权重 ${value}`, 'success');
     }
   });
-  GM_registerMenuCommand('将当前用户加入白名单', async () => {
+  GM_registerMenuCommand('维护白名单（UID）', manageWhitelist);
+  GM_registerMenuCommand('维护黑名单（UID）', manageBlacklist);
+  GM_registerMenuCommand('当前用户加入白名单', async () => {
     const profile = st.profile || await resolveProfile().catch(() => null);
-    if (!profile?.uid) return;
-    const set = whitelist();
-    set.add(profile.uid);
-    GM_setValue(K.WL, [...set]);
-    toast('已加入白名单', profile.name || profile.uid, 'success');
+    if (!profile?.uid) return toast('无法识别当前用户', '请进入用户主页', 'warning');
+    try {
+      await addWhitelist(profile.uid, profile.name);
+      toast('已加入白名单', `${profile.name || profile.uid} · 如原先已拉黑，已同步解除`, 'success');
+    } catch (e) {
+      toast('加入白名单失败', String(e.message || e), 'error', 4500);
+    }
+  });
+  GM_registerMenuCommand('当前用户移出白名单', async () => {
+    const profile = st.profile || await resolveProfile().catch(() => null);
+    if (!profile?.uid) return toast('无法识别当前用户', '请进入用户主页', 'warning');
+    const changed = removeWhitelist(profile.uid);
+    toast(changed ? '已移出白名单' : '当前用户不在白名单', profile.name || profile.uid, changed ? 'success' : 'warning');
+  });
+  GM_registerMenuCommand('当前用户加入黑名单', async () => {
+    const profile = st.profile || await resolveProfile().catch(() => null);
+    if (!profile?.uid) return toast('无法识别当前用户', '请进入用户主页', 'warning');
+    try {
+      await addBlacklist(profile.uid, profile.name);
+      toast('已加入黑名单', `${profile.name || profile.uid} · 已从白名单移除`, 'success');
+    } catch (e) {
+      toast('加入黑名单失败', String(e.message || e), 'error', 4500);
+    }
+  });
+  GM_registerMenuCommand('当前用户解除黑名单', async () => {
+    const profile = st.profile || await resolveProfile().catch(() => null);
+    if (!profile?.uid) return toast('无法识别当前用户', '请进入用户主页', 'warning');
+    try {
+      await removeBlacklist(profile.uid);
+      toast('已解除黑名单', profile.name || profile.uid, 'success');
+    } catch (e) {
+      toast('解除黑名单失败', String(e.message || e), 'error', 4500);
+    }
   });
   GM_registerMenuCommand('查看插件统计', () => modal({
     title: '关注列表定律 Pro',
@@ -943,6 +1170,8 @@
   addEventListener('hashchange', route);
 
   const start = () => {
+    // v0.5.6: white list has highest priority; purge stale local black/seed state for white UIDs.
+    for (const uid of whitelist()) clearBlockedLocal(uid, { removeSeedToo: true });
     observe();
     route();
     refreshBlacklistIfStale();
