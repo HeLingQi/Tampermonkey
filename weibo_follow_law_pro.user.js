@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         微博关注列表定律 Pro
 // @namespace    https://weibo.com/
-// @version      0.5.6
+// @version      0.5.7
 // @description  后台静默扫描关注列表并自动拉黑；支持关注/粉丝比例规则、黑白名单互斥管理、种子库迁移与拉黑状态识别。
 // @updateURL    https://raw.githubusercontent.com/HeLingQi/Tampermonkey/main/weibo_follow_law_pro.user.js
 // @downloadURL  https://raw.githubusercontent.com/HeLingQi/Tampermonkey/main/weibo_follow_law_pro.user.js
@@ -10,6 +10,7 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
+// @grant        GM_unregisterMenuCommand
 // @grant        unsafeWindow
 // @run-at       document-start
 // ==/UserScript==
@@ -54,7 +55,9 @@
     profile: null,
     observer: null,
     profileInjecting: false,
-    blacklistSyncing: null
+    blacklistSyncing: null,
+    whiteMenuId: null,
+    blackMenuId: null
   };
 
   const obj = (k, d = {}) => {
@@ -365,6 +368,7 @@
       GM_setValue(K.INIT, true);
       bump();
       refreshBlockButtons();
+      refreshCurrentUserMenus(st.profile);
       return nextSeeds;
     })();
 
@@ -500,6 +504,7 @@
 
     clearBlockedLocal(uid, { removeSeedToo: true });
     refreshBlockButtons(uid);
+    if (st.profile?.uid === uid) refreshCurrentUserMenus(st.profile);
     return { uid, name };
   }
 
@@ -509,6 +514,7 @@
     const changed = set.delete(uid);
     if (changed) GM_setValue(K.WL, [...set]);
     refreshBlockButtons(uid);
+    if (st.profile?.uid === uid) refreshCurrentUserMenus(st.profile);
     return changed;
   }
 
@@ -521,6 +527,7 @@
     if (!isActuallyBlocked(uid)) await doBlock(uid);
     addSeed(uid, name, cfg().defaultSeedWeight, 'manual');
     markBlocked(uid, 'manual');
+    if (st.profile?.uid === uid) refreshCurrentUserMenus(st.profile);
     return uid;
   }
 
@@ -529,6 +536,7 @@
     if (!/^\d{5,}$/.test(uid)) throw new Error('UID 格式无效');
     if (isActuallyBlocked(uid)) await doUnblock(uid);
     clearBlockedLocal(uid, { removeSeedToo });
+    if (st.profile?.uid === uid) refreshCurrentUserMenus(st.profile);
     return uid;
   }
 
@@ -869,6 +877,7 @@
     const profile = await resolveProfile(run);
     if (!profile || run !== st.run) return;
     st.profile = profile;
+    refreshCurrentUserMenus(profile);
     injectProfile();
 
     if (profile.uid === myUid() || isSelf() || whitelist().has(profile.uid)) return;
@@ -945,12 +954,71 @@
     }
   }
 
+  function clearCurrentUserMenus() {
+    for (const key of ['whiteMenuId', 'blackMenuId']) {
+      const id = st[key];
+      if (id != null) {
+        try { GM_unregisterMenuCommand(id); } catch {}
+        st[key] = null;
+      }
+    }
+  }
+
+  function refreshCurrentUserMenus(profile = st.profile) {
+    clearCurrentUserMenus();
+    if (!profile?.uid || profile.uid === myUid() || isSelf()) return;
+
+    const uid = String(profile.uid);
+    const name = profile.name || uid;
+    const white = isWhitelisted(uid);
+    const black = !white && isActuallyBlocked(uid);
+
+    st.whiteMenuId = GM_registerMenuCommand(
+      white ? '当前用户移出白名单 ✓' : '当前用户加入白名单',
+      async () => {
+        try {
+          if (isWhitelisted(uid)) {
+            removeWhitelist(uid);
+            toast('已移出白名单', name, 'success');
+          } else {
+            await addWhitelist(uid, profile.name);
+            toast('已加入白名单', `${name} · 如原先已拉黑，已同步解除`, 'success');
+          }
+        } catch (e) {
+          toast('白名单操作失败', String(e.message || e), 'error', 4500);
+        } finally {
+          refreshCurrentUserMenus(st.profile?.uid === uid ? st.profile : profile);
+        }
+      }
+    );
+
+    st.blackMenuId = GM_registerMenuCommand(
+      black ? '当前用户解除黑名单 ✓' : '当前用户加入黑名单',
+      async () => {
+        try {
+          if (!isWhitelisted(uid) && isActuallyBlocked(uid)) {
+            await removeBlacklist(uid);
+            toast('已解除黑名单', name, 'success');
+          } else {
+            await addBlacklist(uid, profile.name);
+            toast('已加入黑名单', `${name} · 已从白名单移除`, 'success');
+          }
+        } catch (e) {
+          toast('黑名单操作失败', String(e.message || e), 'error', 4500);
+        } finally {
+          refreshCurrentUserMenus(st.profile?.uid === uid ? st.profile : profile);
+        }
+      }
+    );
+  }
+
   function route() {
     if (location.href === st.href) return;
     st.href = location.href;
     st.run++;
     st.profile = null;
     st.profileInjecting = false;
+    clearCurrentUserMenus();
     document.querySelectorAll('.wflp-profile').forEach(btn => btn.remove());
     const run = st.run;
     if (cfg().enabled && profileHint()) {
@@ -1102,42 +1170,6 @@
   });
   GM_registerMenuCommand('维护白名单（UID）', manageWhitelist);
   GM_registerMenuCommand('维护黑名单（UID）', manageBlacklist);
-  GM_registerMenuCommand('当前用户加入白名单', async () => {
-    const profile = st.profile || await resolveProfile().catch(() => null);
-    if (!profile?.uid) return toast('无法识别当前用户', '请进入用户主页', 'warning');
-    try {
-      await addWhitelist(profile.uid, profile.name);
-      toast('已加入白名单', `${profile.name || profile.uid} · 如原先已拉黑，已同步解除`, 'success');
-    } catch (e) {
-      toast('加入白名单失败', String(e.message || e), 'error', 4500);
-    }
-  });
-  GM_registerMenuCommand('当前用户移出白名单', async () => {
-    const profile = st.profile || await resolveProfile().catch(() => null);
-    if (!profile?.uid) return toast('无法识别当前用户', '请进入用户主页', 'warning');
-    const changed = removeWhitelist(profile.uid);
-    toast(changed ? '已移出白名单' : '当前用户不在白名单', profile.name || profile.uid, changed ? 'success' : 'warning');
-  });
-  GM_registerMenuCommand('当前用户加入黑名单', async () => {
-    const profile = st.profile || await resolveProfile().catch(() => null);
-    if (!profile?.uid) return toast('无法识别当前用户', '请进入用户主页', 'warning');
-    try {
-      await addBlacklist(profile.uid, profile.name);
-      toast('已加入黑名单', `${profile.name || profile.uid} · 已从白名单移除`, 'success');
-    } catch (e) {
-      toast('加入黑名单失败', String(e.message || e), 'error', 4500);
-    }
-  });
-  GM_registerMenuCommand('当前用户解除黑名单', async () => {
-    const profile = st.profile || await resolveProfile().catch(() => null);
-    if (!profile?.uid) return toast('无法识别当前用户', '请进入用户主页', 'warning');
-    try {
-      await removeBlacklist(profile.uid);
-      toast('已解除黑名单', profile.name || profile.uid, 'success');
-    } catch (e) {
-      toast('解除黑名单失败', String(e.message || e), 'error', 4500);
-    }
-  });
   GM_registerMenuCommand('查看插件统计', () => modal({
     title: '关注列表定律 Pro',
     message:
@@ -1170,7 +1202,7 @@
   addEventListener('hashchange', route);
 
   const start = () => {
-    // v0.5.6: white list has highest priority; purge stale local black/seed state for white UIDs.
+    // v0.5.7: white list has highest priority; purge stale local black/seed state for white UIDs.
     for (const uid of whitelist()) clearBlockedLocal(uid, { removeSeedToo: true });
     observe();
     route();
